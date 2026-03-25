@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef, useContext, createContext } from "react";
-import { createClient } from "@supabase/supabase-js";
-
+import { useState, useEffect, useRef, useCallback, useContext, createContext } from "react";
 const LangContext = createContext("en");
 function useLang() { const lang = useContext(LangContext); return T[lang] || T["en"]; }
+import { createClient } from "@supabase/supabase-js";
 
 // ─── Supabase ─────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://kwkqmwhpwhtowhoxtfnp.supabase.co";
