@@ -487,10 +487,6 @@ const css = `
   .btn-assign-confirm { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 12px; font-family:'Nunito',sans-serif; font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; }
   .btn-assign-confirm:active { opacity:.8; }
   .recovery-empty { text-align:center; padding:32px 16px; color:#059669; font-weight:800; font-size:14px; background:#E8FFF4; border:2px solid #A8E6B8; border-radius:14px; }
-`;
-
-  .btn-assign-confirm:active { opacity:.8; }
-  .recovery-empty { text-align:center; padding:32px 16px; color:#059669; font-weight:800; font-size:14px; background:#E8FFF4; border:2px solid #A8E6B8; border-radius:14px; }
 
   /* Session Review Sheet */
   .review-sheet-backdrop { position:fixed; inset:0; background:rgba(26,31,54,.55); z-index:500; display:flex; flex-direction:column; justify-content:flex-end; }
