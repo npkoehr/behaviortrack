@@ -661,18 +661,21 @@ function SessionReviewSheet({ student, session, allLogs, onUpdateLog, onDeleteLo
                                   <div className="review-field-label">Antecedent</div>
                                   <select className="review-field-select" value={editDraft.antecedent} onChange={e=>setEditDraft(p=>({...p,antecedent:e.target.value}))}>
                                     {t.antecedents.map(a=><option key={a}>{a}</option>)}
+                                    {behavior.info?.customAntecedents?.length > 0 && behavior.info.customAntecedents.map(a=><option key={a}>{a}</option>)}
                                   </select>
                                 </div>
                                 <div>
                                   <div className="review-field-label">Behavior</div>
                                   <select className="review-field-select" value={editDraft.behavior} onChange={e=>setEditDraft(p=>({...p,behavior:e.target.value}))}>
                                     {t.behaviorOptions.map(b=><option key={b}>{b}</option>)}
+                                    {behavior.info?.customBehaviors?.length > 0 && behavior.info.customBehaviors.map(b=><option key={b}>{b}</option>)}
                                   </select>
                                 </div>
                                 <div>
                                   <div className="review-field-label">Consequence</div>
                                   <select className="review-field-select" value={editDraft.consequence} onChange={e=>setEditDraft(p=>({...p,consequence:e.target.value}))}>
                                     {t.consequences.map(c=><option key={c}>{c}</option>)}
+                                    {behavior.info?.customConsequences?.length > 0 && behavior.info.customConsequences.map(c=><option key={c}>{c}</option>)}
                                   </select>
                                 </div>
                               </>)}
@@ -1011,9 +1014,18 @@ function LatencyZone({ logs, onLog, user, color }) {
   );
 }
 
-function ABCZone({ logs, onLog, user, color }) {
+function ABCZone({ behavior, logs, onLog, user, color }) {
   const t=useLang();
   const [ant,setAnt]=useState(""); const [beh,setBeh]=useState(""); const [con,setCon]=useState(""); const [note,setNote]=useState(""); const [saved,setSaved]=useState(false);
+
+  // Merge standard + custom options
+  const customAntecedents = behavior?.info?.customAntecedents || [];
+  const customBehaviors = behavior?.info?.customBehaviors || [];
+  const customConsequences = behavior?.info?.customConsequences || [];
+  const allAntecedents = [...t.antecedents, ...customAntecedents];
+  const allBehaviors = [...t.behaviorOptions, ...customBehaviors];
+  const allConsequences = [...t.consequences, ...customConsequences];
+
   function submit(){
     if(!ant||!beh||!con)return;
     onLog({id:uid(),type:"abc",date:today(),time:nowStr(),who:user.name,antecedent:ant,behavior:beh,consequence:con,note,ts:ts()});
@@ -1023,9 +1035,27 @@ function ABCZone({ logs, onLog, user, color }) {
     <div className="tracking-zone" style={{borderColor:color.border+"66"}}>
       <div className="zone-label">{t.abcData}</div>
       <div className="abc-form">
-        <select className="abc-select" value={ant} onChange={e=>setAnt(e.target.value)}><option value="">{t.antecedentPlaceholder}</option>{t.antecedents.map(a=><option key={a}>{a}</option>)}</select>
-        <select className="abc-select" value={beh} onChange={e=>setBeh(e.target.value)}><option value="">{t.behaviorPlaceholder}</option>{t.behaviorOptions.map(b=><option key={b}>{b}</option>)}</select>
-        <select className="abc-select" value={con} onChange={e=>setCon(e.target.value)}><option value="">{t.consequencePlaceholder}</option>{t.consequences.map(c=><option key={c}>{c}</option>)}</select>
+        <select className="abc-select" value={ant} onChange={e=>setAnt(e.target.value)}>
+          <option value="">{t.antecedentPlaceholder}</option>
+          {t.antecedents.length > 0 && customAntecedents.length > 0
+            ? <><optgroup label="Standard">{t.antecedents.map(a=><option key={a}>{a}</option>)}</optgroup><optgroup label="Custom">{customAntecedents.map(a=><option key={a}>{a}</option>)}</optgroup></>
+            : allAntecedents.map(a=><option key={a}>{a}</option>)
+          }
+        </select>
+        <select className="abc-select" value={beh} onChange={e=>setBeh(e.target.value)}>
+          <option value="">{t.behaviorPlaceholder}</option>
+          {t.behaviorOptions.length > 0 && customBehaviors.length > 0
+            ? <><optgroup label="Standard">{t.behaviorOptions.map(b=><option key={b}>{b}</option>)}</optgroup><optgroup label="Custom">{customBehaviors.map(b=><option key={b}>{b}</option>)}</optgroup></>
+            : allBehaviors.map(b=><option key={b}>{b}</option>)
+          }
+        </select>
+        <select className="abc-select" value={con} onChange={e=>setCon(e.target.value)}>
+          <option value="">{t.consequencePlaceholder}</option>
+          {t.consequences.length > 0 && customConsequences.length > 0
+            ? <><optgroup label="Standard">{t.consequences.map(c=><option key={c}>{c}</option>)}</optgroup><optgroup label="Custom">{customConsequences.map(c=><option key={c}>{c}</option>)}</optgroup></>
+            : allConsequences.map(c=><option key={c}>{c}</option>)
+          }
+        </select>
         <input className="abc-select" placeholder={t.notesPlaceholder} value={note} onChange={e=>setNote(e.target.value)}/>
         <button className="abc-submit" style={{background:color.accent}} onClick={submit}>{t.saveAbc}</button>
         {saved && <div className="abc-saved">{t.savedConfirm}</div>}
@@ -1187,7 +1217,7 @@ function BehaviorBlock({ behavior, bIndex, studentId, user, allLogs, onLog }) {
         {behavior.types.includes("duration")&&<DurationZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
         {behavior.types.includes("latency")&&<LatencyZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
         {behavior.types.includes("trials")&&<TrialsZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
-        {behavior.types.includes("abc")&&<ABCZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
+        {behavior.types.includes("abc")&&<ABCZone behavior={behavior} logs={bLogs} onLog={handleLog} user={user} color={color}/>}
         {behavior.types.includes("intensity")&&<IntensityZone behavior={behavior} logs={bLogs} onLog={handleLog} user={user} color={color}/>}
       </div>
       {recent.length>0&&(
@@ -2038,6 +2068,13 @@ function AddBehaviorModal({onSave,onClose,existing}){
   const [intensityConfig,setIntensityConfig]=useState(
     existing?.intensityConfig || {levels:defaultIntensityLevels(3)}
   );
+  // Custom ABC options
+  const [customAntecedents,setCustomAntecedents]=useState(existing?.info?.customAntecedents||[]);
+  const [customBehaviors,setCustomBehaviors]=useState(existing?.info?.customBehaviors||[]);
+  const [customConsequences,setCustomConsequences]=useState(existing?.info?.customConsequences||[]);
+  const [newAnt,setNewAnt]=useState("");
+  const [newBeh,setNewBeh]=useState("");
+  const [newCon,setNewCon]=useState("");
 
   function toggle(tp){setTypes(p=>p.includes(tp)?p.filter(x=>x!==tp):[...p,tp]);}
   function toggleStrategy(s){setStrategies(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);}
@@ -2048,7 +2085,7 @@ function AddBehaviorModal({onSave,onClose,existing}){
       id:existing?.id||uid(),
       name:name.trim(),
       types,
-      info:{description,strategies,customResponses,notes},
+      info:{description,strategies,customResponses,notes,customAntecedents,customBehaviors,customConsequences},
       intensityConfig: types.includes("intensity") ? intensityConfig : undefined,
     });
   }
@@ -2063,10 +2100,60 @@ function AddBehaviorModal({onSave,onClose,existing}){
         <label className="form-label">{t.trackingTypes}</label>
         <div className="type-toggle-row">{TRACK_TYPES.map(tp=><TypeToggle key={tp} type={tp} active={types.includes(tp)} onToggle={toggle}/>)}</div>
 
-        {/* Intensity configuration — shown only when intensity is selected */}
+        {/* Intensity configuration */}
         {types.includes("intensity") && (
           <div style={{marginTop:10,marginBottom:4}}>
             <IntensityConfigEditor config={intensityConfig} onChange={setIntensityConfig}/>
+          </div>
+        )}
+
+        {/* Custom ABC options */}
+        {types.includes("abc") && (
+          <div style={{background:"#EDE9FE22",border:"2px solid #C4ADFF",borderRadius:12,padding:14,marginBottom:14,marginTop:8}}>
+            <div style={{fontSize:11,fontWeight:800,color:"#7C3AED",textTransform:"uppercase",letterSpacing:.5,marginBottom:12}}>📋 Custom ABC Options</div>
+            <div style={{fontSize:11,color:"var(--muted)",fontWeight:600,marginBottom:10}}>Add specific antecedents, behaviors, and consequences for this student. These appear alongside the standard options.</div>
+
+            {/* Custom Antecedents */}
+            <label className="form-label">Custom Antecedents</label>
+            {customAntecedents.map((a,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
+                <span style={{fontSize:12,color:"var(--muted)",fontWeight:700,flexShrink:0}}>A·</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600,color:"var(--text)"}}>{a}</span>
+                <button style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,fontWeight:900,padding:"0 4px"}} onClick={()=>setCustomAntecedents(p=>p.filter((_,j)=>j!==i))}>✕</button>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:6,marginBottom:12}}>
+              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="e.g. Told no by peer" value={newAnt} onChange={e=>setNewAnt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newAnt.trim()){setCustomAntecedents(p=>[...p,newAnt.trim()]);setNewAnt("");}}}/>
+              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newAnt.trim()){setCustomAntecedents(p=>[...p,newAnt.trim()]);setNewAnt("");}}}>+ Add</button>
+            </div>
+
+            {/* Custom Behaviors */}
+            <label className="form-label">Custom Behaviors</label>
+            {customBehaviors.map((b,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
+                <span style={{fontSize:12,color:"var(--muted)",fontWeight:700,flexShrink:0}}>B·</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600,color:"var(--text)"}}>{b}</span>
+                <button style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,fontWeight:900,padding:"0 4px"}} onClick={()=>setCustomBehaviors(p=>p.filter((_,j)=>j!==i))}>✕</button>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:6,marginBottom:12}}>
+              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="e.g. Eloped to gym" value={newBeh} onChange={e=>setNewBeh(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newBeh.trim()){setCustomBehaviors(p=>[...p,newBeh.trim()]);setNewBeh("");}}}/>
+              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newBeh.trim()){setCustomBehaviors(p=>[...p,newBeh.trim()]);setNewBeh("");}}}>+ Add</button>
+            </div>
+
+            {/* Custom Consequences */}
+            <label className="form-label">Custom Consequences</label>
+            {customConsequences.map((c,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
+                <span style={{fontSize:12,color:"var(--muted)",fontWeight:700,flexShrink:0}}>C·</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600,color:"var(--text)"}}>{c}</span>
+                <button style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,fontWeight:900,padding:"0 4px"}} onClick={()=>setCustomConsequences(p=>p.filter((_,j)=>j!==i))}>✕</button>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:6,marginBottom:0}}>
+              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="e.g. Returned to class" value={newCon} onChange={e=>setNewCon(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newCon.trim()){setCustomConsequences(p=>[...p,newCon.trim()]);setNewCon("");}}}/>
+              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newCon.trim()){setCustomConsequences(p=>[...p,newCon.trim()]);setNewCon("");}}}>+ Add</button>
+            </div>
           </div>
         )}
 
