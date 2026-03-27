@@ -927,31 +927,49 @@ function EndSessionDialog({ student, session, onEnd, onKeep, onBack, mode }) {
 }
 
 // ─── Session Banner ───────────────────────────────────────────────────────────
-function SessionBanner({ session, onEndRequest }) {
+function SessionBanner({ session, onEndRequest, onDeleteSession }) {
   const t=useLang();
   const [elapsed, setElapsed] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => {
     if (!session?.timeIn) return;
     const iv = setInterval(() => setElapsed(ts() - session.timeIn), 1000);
     return () => clearInterval(iv);
   }, [session?.timeIn]);
   const active = session?.timeIn && !session?.timeOut;
+  const hasSession = !!session?.timeIn;
   return (
-    <div className={`session-banner ${active?"session-active":""}`}>
-      {active && <div className="session-dot"/>}
-      <div style={{flex:1}}>
-        <div className="session-label">{active?t.sessionInProgress:t.sessionComplete}</div>
-        {active
-          ? <div className="session-time">{t.sessionStarted(new Date(session.timeIn).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}))}</div>
-          : session?.timeIn
-            ? <div className="session-time">{new Date(session.timeIn).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})} → {new Date(session.timeOut).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
-            : <div className="session-time" style={{color:"var(--muted)"}}>{t.noSessionToday}</div>
-        }
-        {active && <div className="session-elapsed">⏱ {fmt(elapsed)} {t.elapsed}</div>}
-        {session?.timeOut && <div className="session-elapsed">{t.sessionTotal} {fmt(session.timeOut-session.timeIn)}</div>}
+    <div className={`session-banner ${active?"session-active":""}`} style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        {active && <div className="session-dot"/>}
+        <div style={{flex:1}}>
+          <div className="session-label">{active?t.sessionInProgress:t.sessionComplete}</div>
+          {active
+            ? <div className="session-time">{t.sessionStarted(new Date(session.timeIn).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}))}</div>
+            : session?.timeIn
+              ? <div className="session-time">{new Date(session.timeIn).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})} → {new Date(session.timeOut).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+              : <div className="session-time" style={{color:"var(--muted)"}}>{t.noSessionToday}</div>
+          }
+          {active && <div className="session-elapsed">⏱ {fmt(elapsed)} {t.elapsed}</div>}
+          {session?.timeOut && <div className="session-elapsed">{t.sessionTotal} {fmt(session.timeOut-session.timeIn)}</div>}
+        </div>
+        {active && (
+          <button className="btn-red-soft" style={{padding:"10px 14px",fontSize:13,flexShrink:0}} onClick={onEndRequest}>{t.endSession}</button>
+        )}
       </div>
-      {active && (
-        <button className="btn-red-soft" style={{padding:"10px 14px",fontSize:13}} onClick={onEndRequest}>{t.endSession}</button>
+      {hasSession && !confirmDelete && (
+        <button onClick={()=>setConfirmDelete(true)} style={{background:"none",border:"none",color:"var(--muted)",fontFamily:"'Nunito',sans-serif",fontSize:11,fontWeight:700,cursor:"pointer",padding:"2px 0",textAlign:"left",textDecoration:"underline",alignSelf:"flex-start"}}>
+          🗑 Delete this session
+        </button>
+      )}
+      {confirmDelete && (
+        <div style={{background:"#FFF0F0",border:"2px solid #FFD4D4",borderRadius:10,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#C0392B"}}>⚠️ This will permanently delete the session and all data logged today for this student. Are you sure?</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{onDeleteSession();setConfirmDelete(false);}} style={{flex:1,background:"var(--red)",color:"#fff",border:"none",borderRadius:8,padding:"9px",fontFamily:"'Nunito',sans-serif",fontWeight:800,fontSize:13,cursor:"pointer"}}>Yes, delete it</button>
+            <button onClick={()=>setConfirmDelete(false)} style={{flex:1,background:"var(--surface2)",color:"var(--muted)",border:"2px solid var(--border)",borderRadius:8,padding:"9px",fontFamily:"'Nunito',sans-serif",fontWeight:700,fontSize:13,cursor:"pointer"}}>Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1406,7 +1424,7 @@ function StudentsPage({ user, allLogs, students, onSelect, onAddStudent }) {
   );
 }
 
-function StudentTrackPage({ student, user, allLogs, onLog, sessions, onReviewRequest, onBack }) {
+function StudentTrackPage({ student, user, allLogs, onLog, sessions, onReviewRequest, onDeleteSession, onBack }) {
   const t=useLang();
   const [showToast, setShowToast] = useState(true);
   const session = sessions[sessionKey(student.id, user.id)];
@@ -1426,7 +1444,11 @@ function StudentTrackPage({ student, user, allLogs, onLog, sessions, onReviewReq
           <div className="track-strip" style={{background:student.color}}/>
         </div>
       </div>
-      <SessionBanner session={session} onEndRequest={()=>onReviewRequest(student, user)}/>
+      <SessionBanner
+        session={session}
+        onEndRequest={()=>onReviewRequest(student, user)}
+        onDeleteSession={()=>onDeleteSession(student.id, user.id)}
+      />
       <div className="behaviors-list">
         {student.behaviors.map((b,i)=><BehaviorBlock key={b.id} behavior={b} bIndex={i} studentId={student.id} user={user} allLogs={allLogs} onLog={onLog}/>)}
         {student.behaviors.length===0&&<div style={{color:"var(--muted)",fontWeight:700,padding:20,background:"var(--surface)",borderRadius:14,textAlign:"center",fontSize:14}}>{t.noBehaviors}</div>}
@@ -2969,6 +2991,24 @@ export default function App() {
     setReviewSession({ student, user });
   }
 
+  function handleParaDeleteSession(studentId, userId) {
+    const key = sessionKey(studentId, userId);
+    const sess = sessions[key];
+    const date = sess ? new Date(sess.timeIn).toLocaleDateString() : today();
+    // Remove session record
+    setSessions(prev => { const u={...prev}; delete u[key]; saveData("bt-sessions-v1",u); return u; });
+    // Remove all behavior logs for this student on this date
+    setAllLogs(prev => {
+      const u = {...prev};
+      Object.keys(u).forEach(k => {
+        if (k.startsWith(studentId+"-")) u[k] = u[k].filter(l => l.date !== date);
+      });
+      saveData("bt-logs-v3", u);
+      return u;
+    });
+    setSelectedStudent(null);
+  }
+
   function navTo(id){
     if(selectedStudent && user){
       const key=sessionKey(selectedStudent.id,user.id);
@@ -3012,7 +3052,9 @@ export default function App() {
           {page==="students"&&selectedStudent&&(
             <StudentTrackPage
               student={selectedStudent} user={user} allLogs={allLogs} onLog={handleLog}
-              sessions={sessions} onReviewRequest={handleReviewRequest} onBack={handleBack}
+              sessions={sessions} onReviewRequest={handleReviewRequest}
+              onDeleteSession={handleParaDeleteSession}
+              onBack={handleBack}
             />
           )}
           {page==="reports"&&<ReportsPage allLogs={allLogs} students={students} sessions={sessions} user={user}/>}
