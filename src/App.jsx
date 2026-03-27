@@ -315,6 +315,16 @@ const css = `
   .abc-submit { background:var(--purple); color:#fff; border:none; border-radius:30px; padding:12px; font-family:'Nunito',sans-serif; font-weight:800; font-size:14px; cursor:pointer; width:100%; }
   .abc-saved { color:#059669; font-size:12px; font-weight:800; margin-top:4px; }
 
+  /* Multi-select ABC picker */
+  .abc-section-label { font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:7px; }
+  .abc-chip-grid { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .abc-chip { border-radius:20px; padding:6px 12px; font-family:'Nunito',sans-serif; font-size:12px; font-weight:700; cursor:pointer; border:2px solid var(--border); background:var(--surface2); color:var(--muted); transition:all .12s; -webkit-tap-highlight-color:transparent; }
+  .abc-chip.selected { border-color:var(--purple); background:#EDE9FE; color:#5B21B6; }
+  .abc-chip.other-chip { border-style:dashed; }
+  .abc-chip.other-chip.selected { border-style:solid; }
+  .abc-other-input { width:100%; background:var(--surface); border:2px solid var(--purple); border-radius:var(--radius-sm); padding:9px 12px; color:var(--text); font-family:'Nunito',sans-serif; font-size:13px; font-weight:600; outline:none; margin-bottom:10px; }
+  .abc-divider { height:1px; background:var(--border); margin:10px 0; }
+
   /* Intensity zone */
   .intensity-level-btn { width:100%; display:flex; align-items:center; gap:12px; border-radius:12px; padding:11px 14px; cursor:pointer; font-family:'Nunito',sans-serif; text-align:left; transition:all .12s; margin-bottom:6px; }
   .intensity-level-btn:last-child { margin-bottom:0; }
@@ -660,22 +670,19 @@ function SessionReviewSheet({ student, session, allLogs, onUpdateLog, onDeleteLo
                                 <div>
                                   <div className="review-field-label">Antecedent</div>
                                   <select className="review-field-select" value={editDraft.antecedent} onChange={e=>setEditDraft(p=>({...p,antecedent:e.target.value}))}>
-                                    {t.antecedents.map(a=><option key={a}>{a}</option>)}
-                                    {behavior.info?.customAntecedents?.length > 0 && behavior.info.customAntecedents.map(a=><option key={a}>{a}</option>)}
+                                    {(behavior.info?.abcAntecedents ?? t.antecedents).map(a=><option key={a}>{a}</option>)}
                                   </select>
                                 </div>
                                 <div>
                                   <div className="review-field-label">Behavior</div>
                                   <select className="review-field-select" value={editDraft.behavior} onChange={e=>setEditDraft(p=>({...p,behavior:e.target.value}))}>
-                                    {t.behaviorOptions.map(b=><option key={b}>{b}</option>)}
-                                    {behavior.info?.customBehaviors?.length > 0 && behavior.info.customBehaviors.map(b=><option key={b}>{b}</option>)}
+                                    {(behavior.info?.abcBehaviors ?? t.behaviorOptions).map(b=><option key={b}>{b}</option>)}
                                   </select>
                                 </div>
                                 <div>
                                   <div className="review-field-label">Consequence</div>
                                   <select className="review-field-select" value={editDraft.consequence} onChange={e=>setEditDraft(p=>({...p,consequence:e.target.value}))}>
-                                    {t.consequences.map(c=><option key={c}>{c}</option>)}
-                                    {behavior.info?.customConsequences?.length > 0 && behavior.info.customConsequences.map(c=><option key={c}>{c}</option>)}
+                                    {(behavior.info?.abcConsequences ?? t.consequences).map(c=><option key={c}>{c}</option>)}
                                   </select>
                                 </div>
                               </>)}
@@ -1016,48 +1023,114 @@ function LatencyZone({ logs, onLog, user, color }) {
 
 function ABCZone({ behavior, logs, onLog, user, color }) {
   const t=useLang();
-  const [ant,setAnt]=useState(""); const [beh,setBeh]=useState(""); const [con,setCon]=useState(""); const [note,setNote]=useState(""); const [saved,setSaved]=useState(false);
 
-  // Merge standard + custom options
-  const customAntecedents = behavior?.info?.customAntecedents || [];
-  const customBehaviors = behavior?.info?.customBehaviors || [];
-  const customConsequences = behavior?.info?.customConsequences || [];
-  const allAntecedents = [...t.antecedents, ...customAntecedents];
-  const allBehaviors = [...t.behaviorOptions, ...customBehaviors];
-  const allConsequences = [...t.consequences, ...customConsequences];
+  // Use per-behavior saved lists, falling back to global presets
+  const antecedents  = behavior?.info?.abcAntecedents  ?? t.antecedents;
+  const behaviorOpts = behavior?.info?.abcBehaviors    ?? t.behaviorOptions;
+  const consequences = behavior?.info?.abcConsequences ?? t.consequences;
 
-  function submit(){
-    if(!ant||!beh||!con)return;
-    onLog({id:uid(),type:"abc",date:today(),time:nowStr(),who:user.name,antecedent:ant,behavior:beh,consequence:con,note,ts:ts()});
-    setAnt("");setBeh("");setCon("");setNote("");setSaved(true);setTimeout(()=>setSaved(false),2000);
+  const [ants,  setAnts]  = useState([]); // selected antecedents (array)
+  const [behs,  setBehs]  = useState([]); // selected behaviors
+  const [cons,  setCons]  = useState([]); // selected consequences
+  const [antOther,  setAntOther]  = useState("");
+  const [behOther,  setBehOther]  = useState("");
+  const [conOther,  setConOther]  = useState("");
+  const [note,  setNote]  = useState("");
+  const [saved, setSaved] = useState(false);
+
+  function toggle(list, setList, val) {
+    setList(p => p.includes(val) ? p.filter(x=>x!==val) : [...p,val]);
   }
+
+  function buildValue(selected, otherText) {
+    const all = [...selected];
+    if (otherText.trim()) all.push(otherText.trim());
+    return all.join(", ");
+  }
+
+  function submit() {
+    const antVal = buildValue(ants, antOther);
+    const behVal = buildValue(behs, behOther);
+    const conVal = buildValue(cons, conOther);
+    if (!antVal || !behVal || !conVal) return;
+    onLog({id:uid(),type:"abc",date:today(),time:nowStr(),who:user.name,
+      antecedent:antVal, behavior:behVal, consequence:conVal, note, ts:ts()});
+    setAnts([]); setBehs([]); setCons([]);
+    setAntOther(""); setBehOther(""); setConOther("");
+    setNote(""); setSaved(true); setTimeout(()=>setSaved(false),2000);
+  }
+
+  const antDone  = ants.length > 0 || antOther.trim();
+  const behDone  = behs.length > 0 || behOther.trim();
+  const conDone  = cons.length > 0 || conOther.trim();
+
+  function ABCPicker({ label, prefix, options, selected, onToggle, otherText, onOtherChange, accentColor }) {
+    const hasOther = selected.includes("__other__");
+    return (
+      <div style={{marginBottom:12}}>
+        <div className="abc-section-label" style={{color:accentColor}}>{prefix} — {label}</div>
+        <div className="abc-chip-grid">
+          {options.map(opt=>(
+            <button key={opt} className={`abc-chip ${selected.includes(opt)?"selected":""}`}
+              style={selected.includes(opt)?{borderColor:accentColor,background:accentColor+"22",color:accentColor}:{}}
+              onClick={()=>onToggle(opt)}>
+              {opt}
+            </button>
+          ))}
+          <button className={`abc-chip other-chip ${hasOther?"selected":""}`}
+            style={hasOther?{borderColor:accentColor,background:accentColor+"22",color:accentColor}:{}}
+            onClick={()=>onToggle("__other__")}>
+            ✏️ Other
+          </button>
+        </div>
+        {hasOther && (
+          <input className="abc-other-input" style={{borderColor:accentColor}}
+            placeholder={`Describe other ${label.toLowerCase()}…`}
+            value={otherText} onChange={e=>onOtherChange(e.target.value)} autoFocus/>
+        )}
+        {(selected.filter(x=>x!=="__other__").length > 0 || (hasOther && otherText.trim())) && (
+          <div style={{fontSize:11,color:accentColor,fontWeight:700,marginTop:-4,marginBottom:4}}>
+            ✓ {[...selected.filter(x=>x!=="__other__"), hasOther&&otherText.trim()?otherText.trim():null].filter(Boolean).join(", ")}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="tracking-zone" style={{borderColor:color.border+"66"}}>
       <div className="zone-label">{t.abcData}</div>
       <div className="abc-form">
-        <select className="abc-select" value={ant} onChange={e=>setAnt(e.target.value)}>
-          <option value="">{t.antecedentPlaceholder}</option>
-          {t.antecedents.length > 0 && customAntecedents.length > 0
-            ? <><optgroup label="Standard">{t.antecedents.map(a=><option key={a}>{a}</option>)}</optgroup><optgroup label="Custom">{customAntecedents.map(a=><option key={a}>{a}</option>)}</optgroup></>
-            : allAntecedents.map(a=><option key={a}>{a}</option>)
-          }
-        </select>
-        <select className="abc-select" value={beh} onChange={e=>setBeh(e.target.value)}>
-          <option value="">{t.behaviorPlaceholder}</option>
-          {t.behaviorOptions.length > 0 && customBehaviors.length > 0
-            ? <><optgroup label="Standard">{t.behaviorOptions.map(b=><option key={b}>{b}</option>)}</optgroup><optgroup label="Custom">{customBehaviors.map(b=><option key={b}>{b}</option>)}</optgroup></>
-            : allBehaviors.map(b=><option key={b}>{b}</option>)
-          }
-        </select>
-        <select className="abc-select" value={con} onChange={e=>setCon(e.target.value)}>
-          <option value="">{t.consequencePlaceholder}</option>
-          {t.consequences.length > 0 && customConsequences.length > 0
-            ? <><optgroup label="Standard">{t.consequences.map(c=><option key={c}>{c}</option>)}</optgroup><optgroup label="Custom">{customConsequences.map(c=><option key={c}>{c}</option>)}</optgroup></>
-            : allConsequences.map(c=><option key={c}>{c}</option>)
-          }
-        </select>
+        <ABCPicker
+          label="Antecedent" prefix="A"
+          options={antecedents} selected={ants} onToggle={v=>toggle(ants,setAnts,v)}
+          otherText={antOther} onOtherChange={setAntOther}
+          accentColor="#7C3AED"
+        />
+        <div className="abc-divider"/>
+        <ABCPicker
+          label="Behavior" prefix="B"
+          options={behaviorOpts} selected={behs} onToggle={v=>toggle(behs,setBehs,v)}
+          otherText={behOther} onOtherChange={setBehOther}
+          accentColor="#0B6EA3"
+        />
+        <div className="abc-divider"/>
+        <ABCPicker
+          label="Consequence" prefix="C"
+          options={consequences} selected={cons} onToggle={v=>toggle(cons,setCons,v)}
+          otherText={conOther} onOtherChange={setConOther}
+          accentColor="#1A7A3A"
+        />
+        <div className="abc-divider"/>
         <input className="abc-select" placeholder={t.notesPlaceholder} value={note} onChange={e=>setNote(e.target.value)}/>
-        <button className="abc-submit" style={{background:color.accent}} onClick={submit}>{t.saveAbc}</button>
+        <button className="abc-submit" style={{background: antDone&&behDone&&conDone ? color.accent : "var(--border)", color: antDone&&behDone&&conDone ? "#fff" : "var(--muted)", cursor: antDone&&behDone&&conDone ? "pointer" : "default"}} onClick={submit}>
+          {t.saveAbc}
+        </button>
+        {(!antDone||!behDone||!conDone) && (
+          <div style={{fontSize:11,color:"var(--muted)",fontWeight:600,marginTop:4}}>
+            Select at least one option for {[!antDone&&"A",!behDone&&"B",!conDone&&"C"].filter(Boolean).join(", ")} to save
+          </div>
+        )}
         {saved && <div className="abc-saved">{t.savedConfirm}</div>}
       </div>
     </div>
@@ -2068,10 +2141,17 @@ function AddBehaviorModal({onSave,onClose,existing}){
   const [intensityConfig,setIntensityConfig]=useState(
     existing?.intensityConfig || {levels:defaultIntensityLevels(3)}
   );
-  // Custom ABC options
-  const [customAntecedents,setCustomAntecedents]=useState(existing?.info?.customAntecedents||[]);
-  const [customBehaviors,setCustomBehaviors]=useState(existing?.info?.customBehaviors||[]);
-  const [customConsequences,setCustomConsequences]=useState(existing?.info?.customConsequences||[]);
+
+  // ABC options — start from full presets (or saved state), allow delete + add custom
+  const [abcAntecedents, setAbcAntecedents] = useState(
+    existing?.info?.abcAntecedents ?? ANTECEDENTS
+  );
+  const [abcBehaviors, setAbcBehaviors] = useState(
+    existing?.info?.abcBehaviors ?? BEHAVIOR_OPTIONS
+  );
+  const [abcConsequences, setAbcConsequences] = useState(
+    existing?.info?.abcConsequences ?? CONSEQUENCES
+  );
   const [newAnt,setNewAnt]=useState("");
   const [newBeh,setNewBeh]=useState("");
   const [newCon,setNewCon]=useState("");
@@ -2085,7 +2165,7 @@ function AddBehaviorModal({onSave,onClose,existing}){
       id:existing?.id||uid(),
       name:name.trim(),
       types,
-      info:{description,strategies,customResponses,notes,customAntecedents,customBehaviors,customConsequences},
+      info:{description,strategies,customResponses,notes,abcAntecedents,abcBehaviors,abcConsequences},
       intensityConfig: types.includes("intensity") ? intensityConfig : undefined,
     });
   }
@@ -2107,52 +2187,58 @@ function AddBehaviorModal({onSave,onClose,existing}){
           </div>
         )}
 
-        {/* Custom ABC options */}
+        {/* ABC options — editable presets + custom additions */}
         {types.includes("abc") && (
           <div style={{background:"#EDE9FE22",border:"2px solid #C4ADFF",borderRadius:12,padding:14,marginBottom:14,marginTop:8}}>
-            <div style={{fontSize:11,fontWeight:800,color:"#7C3AED",textTransform:"uppercase",letterSpacing:.5,marginBottom:12}}>📋 Custom ABC Options</div>
-            <div style={{fontSize:11,color:"var(--muted)",fontWeight:600,marginBottom:10}}>Add specific antecedents, behaviors, and consequences for this student. These appear alongside the standard options.</div>
+            <div style={{fontSize:11,fontWeight:800,color:"#7C3AED",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>📋 ABC Options</div>
+            <div style={{fontSize:11,color:"var(--muted)",fontWeight:600,marginBottom:12}}>Presets are shown by default. Tap ✕ to remove any you don't need, or add custom ones specific to this student.</div>
 
-            {/* Custom Antecedents */}
-            <label className="form-label">Custom Antecedents</label>
-            {customAntecedents.map((a,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                <span style={{fontSize:12,color:"var(--muted)",fontWeight:700,flexShrink:0}}>A·</span>
-                <span style={{flex:1,fontSize:13,fontWeight:600,color:"var(--text)"}}>{a}</span>
-                <button style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,fontWeight:900,padding:"0 4px"}} onClick={()=>setCustomAntecedents(p=>p.filter((_,j)=>j!==i))}>✕</button>
-              </div>
-            ))}
-            <div style={{display:"flex",gap:6,marginBottom:12}}>
-              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="e.g. Told no by peer" value={newAnt} onChange={e=>setNewAnt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newAnt.trim()){setCustomAntecedents(p=>[...p,newAnt.trim()]);setNewAnt("");}}}/>
-              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newAnt.trim()){setCustomAntecedents(p=>[...p,newAnt.trim()]);setNewAnt("");}}}>+ Add</button>
+            {/* Antecedents */}
+            <label className="form-label">Antecedents (A)</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {abcAntecedents.map((a,i)=>(
+                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#EDE9FE",border:"1.5px solid #C4ADFF",borderRadius:20,padding:"4px 10px 4px 12px",fontSize:12,fontWeight:700,color:"#5B21B6"}}>
+                  <span>{a}</span>
+                  <button style={{background:"none",border:"none",cursor:"pointer",color:"#7C3AED",fontSize:13,fontWeight:900,padding:"0 0 0 2px",lineHeight:1,display:"flex",alignItems:"center"}} onClick={()=>setAbcAntecedents(p=>p.filter((_,j)=>j!==i))}>✕</button>
+                </div>
+              ))}
+              {abcAntecedents.length===0&&<span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>All removed — add some below</span>}
+            </div>
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="Add antecedent…" value={newAnt} onChange={e=>setNewAnt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newAnt.trim()){setAbcAntecedents(p=>[...p,newAnt.trim()]);setNewAnt("");}}}/>
+              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newAnt.trim()){setAbcAntecedents(p=>[...p,newAnt.trim()]);setNewAnt("");}}}>+ Add</button>
             </div>
 
-            {/* Custom Behaviors */}
-            <label className="form-label">Custom Behaviors</label>
-            {customBehaviors.map((b,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                <span style={{fontSize:12,color:"var(--muted)",fontWeight:700,flexShrink:0}}>B·</span>
-                <span style={{flex:1,fontSize:13,fontWeight:600,color:"var(--text)"}}>{b}</span>
-                <button style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,fontWeight:900,padding:"0 4px"}} onClick={()=>setCustomBehaviors(p=>p.filter((_,j)=>j!==i))}>✕</button>
-              </div>
-            ))}
-            <div style={{display:"flex",gap:6,marginBottom:12}}>
-              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="e.g. Eloped to gym" value={newBeh} onChange={e=>setNewBeh(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newBeh.trim()){setCustomBehaviors(p=>[...p,newBeh.trim()]);setNewBeh("");}}}/>
-              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newBeh.trim()){setCustomBehaviors(p=>[...p,newBeh.trim()]);setNewBeh("");}}}>+ Add</button>
+            {/* Behaviors */}
+            <label className="form-label">Behaviors (B)</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {abcBehaviors.map((b,i)=>(
+                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#EDE9FE",border:"1.5px solid #C4ADFF",borderRadius:20,padding:"4px 10px 4px 12px",fontSize:12,fontWeight:700,color:"#5B21B6"}}>
+                  <span>{b}</span>
+                  <button style={{background:"none",border:"none",cursor:"pointer",color:"#7C3AED",fontSize:13,fontWeight:900,padding:"0 0 0 2px",lineHeight:1,display:"flex",alignItems:"center"}} onClick={()=>setAbcBehaviors(p=>p.filter((_,j)=>j!==i))}>✕</button>
+                </div>
+              ))}
+              {abcBehaviors.length===0&&<span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>All removed — add some below</span>}
+            </div>
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="Add behavior…" value={newBeh} onChange={e=>setNewBeh(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newBeh.trim()){setAbcBehaviors(p=>[...p,newBeh.trim()]);setNewBeh("");}}}/>
+              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newBeh.trim()){setAbcBehaviors(p=>[...p,newBeh.trim()]);setNewBeh("");}}}>+ Add</button>
             </div>
 
-            {/* Custom Consequences */}
-            <label className="form-label">Custom Consequences</label>
-            {customConsequences.map((c,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                <span style={{fontSize:12,color:"var(--muted)",fontWeight:700,flexShrink:0}}>C·</span>
-                <span style={{flex:1,fontSize:13,fontWeight:600,color:"var(--text)"}}>{c}</span>
-                <button style={{background:"none",border:"none",cursor:"pointer",color:"var(--red)",fontSize:14,fontWeight:900,padding:"0 4px"}} onClick={()=>setCustomConsequences(p=>p.filter((_,j)=>j!==i))}>✕</button>
-              </div>
-            ))}
+            {/* Consequences */}
+            <label className="form-label">Consequences (C)</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {abcConsequences.map((c,i)=>(
+                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#EDE9FE",border:"1.5px solid #C4ADFF",borderRadius:20,padding:"4px 10px 4px 12px",fontSize:12,fontWeight:700,color:"#5B21B6"}}>
+                  <span>{c}</span>
+                  <button style={{background:"none",border:"none",cursor:"pointer",color:"#7C3AED",fontSize:13,fontWeight:900,padding:"0 0 0 2px",lineHeight:1,display:"flex",alignItems:"center"}} onClick={()=>setAbcConsequences(p=>p.filter((_,j)=>j!==i))}>✕</button>
+                </div>
+              ))}
+              {abcConsequences.length===0&&<span style={{fontSize:12,color:"var(--muted)",fontWeight:600}}>All removed — add some below</span>}
+            </div>
             <div style={{display:"flex",gap:6,marginBottom:0}}>
-              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="e.g. Returned to class" value={newCon} onChange={e=>setNewCon(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newCon.trim()){setCustomConsequences(p=>[...p,newCon.trim()]);setNewCon("");}}}/>
-              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newCon.trim()){setCustomConsequences(p=>[...p,newCon.trim()]);setNewCon("");}}}>+ Add</button>
+              <input className="form-input" style={{flex:1,marginBottom:0,fontSize:13,padding:"9px 11px"}} placeholder="Add consequence…" value={newCon} onChange={e=>setNewCon(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newCon.trim()){setAbcConsequences(p=>[...p,newCon.trim()]);setNewCon("");}}}/>
+              <button className="btn-secondary" style={{flexShrink:0,padding:"9px 12px",fontSize:13}} onClick={()=>{if(newCon.trim()){setAbcConsequences(p=>[...p,newCon.trim()]);setNewCon("");}}}>+ Add</button>
             </div>
           </div>
         )}
