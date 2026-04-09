@@ -191,6 +191,20 @@ const css = `
   .pin-input:focus { border-color:var(--accent); }
   .pin-error { color:var(--red); font-size:13px; margin-top:6px; font-weight:700; }
 
+  /* Login search dropdown */
+  .login-search-wrap { position:relative; margin-bottom:8px; }
+  .login-search-input { width:100%; background:var(--surface2); border:2px solid var(--border); border-radius:var(--radius-sm); padding:14px 44px 14px 48px; color:var(--text); font-family:'Nunito',sans-serif; font-size:16px; font-weight:700; outline:none; transition:border-color .2s; }
+  .login-search-input:focus { border-color:var(--accent); background:#fff; }
+  .login-search-icon { position:absolute; left:15px; top:50%; transform:translateY(-50%); font-size:18px; pointer-events:none; }
+  .login-search-clear { position:absolute; right:14px; top:50%; transform:translateY(-50%); background:var(--border); border:none; border-radius:50%; width:22px; height:22px; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--muted); font-weight:900; }
+  .login-dropdown { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; box-shadow:0 4px 20px rgba(91,142,255,.16); margin-bottom:4px; }
+  .login-dropdown-item { width:100%; background:none; border:none; border-bottom:1px solid var(--border); padding:14px 16px; cursor:pointer; display:flex; align-items:center; gap:12px; color:var(--text); font-family:'Nunito',sans-serif; font-size:15px; font-weight:700; text-align:left; -webkit-tap-highlight-color:transparent; }
+  .login-dropdown-item:last-child { border-bottom:none; }
+  .login-dropdown-item:active { background:#EEF3FF; }
+  .login-no-results { padding:16px; color:var(--muted); font-size:14px; font-weight:600; text-align:center; }
+  .login-selected-banner { background:#EEF3FF; border:2px solid var(--accent); border-radius:var(--radius-sm); padding:12px 16px; display:flex; align-items:center; gap:12px; margin-bottom:14px; cursor:pointer; }
+  .login-selected-change { font-size:11px; color:var(--accent); font-weight:800; margin-left:auto; text-decoration:underline; flex-shrink:0; }
+
   .btn-primary { background:var(--accent); color:#fff; border:none; border-radius:var(--radius-sm); padding:13px 18px; font-family:'Nunito',sans-serif; font-size:15px; font-weight:800; cursor:pointer; transition:all .15s; box-shadow:0 3px 10px rgba(91,142,255,.28); display:inline-block; }
   .btn-primary:active { transform:scale(.96); }
   .btn-primary.full { width:100%; margin-top:10px; display:block; text-align:center; }
@@ -980,9 +994,9 @@ function Toast({ message }) {
 }
 
 // ─── Tracking Zones ───────────────────────────────────────────────────────────
-function FrequencyZone({ logs, onLog, user, color }) {
+function FrequencyZone({ logs, onLog, user, color, sessionStart }) {
   const t=useLang();
-  const count = logs.filter(l=>l.type==="frequency"&&l.date===today()).length;
+  const count = logs.filter(l=>l.type==="frequency"&&l.ts>=sessionStart).length;
   return (
     <div className="tracking-zone" style={{borderColor:color.border+"66"}}>
       <div className="zone-label">{t.frequency}</div>
@@ -995,14 +1009,14 @@ function FrequencyZone({ logs, onLog, user, color }) {
   );
 }
 
-function DurationZone({ logs, onLog, user, color }) {
+function DurationZone({ logs, onLog, user, color, sessionStart }) {
   const t=useLang();
   const [running,setRunning]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const startRef=useRef(null); const intRef=useRef(null);
   function start(){startRef.current=ts();setRunning(true);intRef.current=setInterval(()=>setElapsed(ts()-startRef.current),100);}
   function stop(){clearInterval(intRef.current);const dur=ts()-startRef.current;setRunning(false);setElapsed(0);onLog({id:uid(),type:"duration",date:today(),time:nowStr(),who:user.name,value:dur,ts:ts()});}
-  const dl=logs.filter(l=>l.type==="duration"&&l.date===today());
+  const dl=logs.filter(l=>l.type==="duration"&&l.ts>=sessionStart);
   const avg=dl.length?Math.round(dl.reduce((a,l)=>a+l.value,0)/dl.length):0;
   return (
     <div className="tracking-zone" style={{borderColor:color.border+"66"}}>
@@ -1017,14 +1031,14 @@ function DurationZone({ logs, onLog, user, color }) {
   );
 }
 
-function LatencyZone({ logs, onLog, user, color }) {
+function LatencyZone({ logs, onLog, user, color, sessionStart }) {
   const t=useLang();
   const [running,setRunning]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const startRef=useRef(null); const intRef=useRef(null);
   function start(){startRef.current=ts();setRunning(true);intRef.current=setInterval(()=>setElapsed(ts()-startRef.current),100);}
   function stop(){clearInterval(intRef.current);const lat=ts()-startRef.current;setRunning(false);setElapsed(0);onLog({id:uid(),type:"latency",date:today(),time:nowStr(),who:user.name,value:lat,ts:ts()});}
-  const ll=logs.filter(l=>l.type==="latency"&&l.date===today());
+  const ll=logs.filter(l=>l.type==="latency"&&l.ts>=sessionStart);
   const avg=ll.length?Math.round(ll.reduce((a,l)=>a+l.value,0)/ll.length):0;
   return (
     <div className="tracking-zone" style={{borderColor:color.border+"66"}}>
@@ -1155,9 +1169,9 @@ function ABCZone({ behavior, logs, onLog, user, color }) {
   );
 }
 
-function TrialsZone({ logs, onLog, user, color }) {
+function TrialsZone({ logs, onLog, user, color, sessionStart }) {
   const t=useLang();
-  const tl=logs.filter(l=>l.type==="trial"&&l.date===today());
+  const tl=logs.filter(l=>l.type==="trial"&&l.ts>=sessionStart);
   const correct=tl.filter(l=>l.result==="correct").length;
   const incorrect=tl.filter(l=>l.result==="incorrect").length;
   const total=correct+incorrect;
@@ -1193,9 +1207,9 @@ function TrialsZone({ logs, onLog, user, color }) {
 }
 
 // ─── Intensity Zone ───────────────────────────────────────────────────────────
-function IntensityZone({ behavior, logs, onLog, user, color }) {
+function IntensityZone({ behavior, logs, onLog, user, color, sessionStart }) {
   const levels = behavior.intensityConfig?.levels || [];
-  const todayLogs = logs.filter(l => l.type === "intensity" && l.date === today());
+  const todayLogs = logs.filter(l => l.type === "intensity" && l.ts >= sessionStart);
   const total = levels.length;
 
   const avgLevel = todayLogs.length
@@ -1278,15 +1292,16 @@ function IntensityZone({ behavior, logs, onLog, user, color }) {
   );
 }
 
-function BehaviorBlock({ behavior, bIndex, studentId, user, allLogs, onLog }) {
+function BehaviorBlock({ behavior, bIndex, studentId, user, allLogs, onLog, sessionStart }) {
   const tr=useLang();
   const color=bColor(bIndex);
   const key=`${studentId}-${behavior.id}`;
   const bLogs=allLogs[key]||[];
-  const recent=bLogs.slice(-3).reverse();
-  const todayCount=bLogs.filter(l=>l.date===today()).length;
+  const sessionLogs=bLogs.filter(l=>l.ts>=sessionStart);
+  const recent=sessionLogs.slice(-3).reverse();
+  const todayCount=sessionLogs.length;
   const [showInfo,setShowInfo]=useState(false);
-  function handleLog(entry){onLog(studentId,behavior.id,entry);}
+  function handleLog(entry){onLog(studentId,behavior.id,{...entry,behaviorName:behavior.name});}
   return (
     <div className="behavior-block" style={{borderColor:color.border,background:color.bg}}>
       <div className="behavior-header" style={{borderColor:color.border,background:color.bg}}>
@@ -1304,12 +1319,12 @@ function BehaviorBlock({ behavior, bIndex, studentId, user, allLogs, onLog }) {
       </div>
       {showInfo && <BehaviorInfoModal behavior={behavior} onClose={()=>setShowInfo(false)}/>}
       <div className="tracking-zones">
-        {behavior.types.includes("frequency")&&<FrequencyZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
-        {behavior.types.includes("duration")&&<DurationZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
-        {behavior.types.includes("latency")&&<LatencyZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
-        {behavior.types.includes("trials")&&<TrialsZone logs={bLogs} onLog={handleLog} user={user} color={color}/>}
-        {behavior.types.includes("abc")&&<ABCZone behavior={behavior} logs={bLogs} onLog={handleLog} user={user} color={color}/>}
-        {behavior.types.includes("intensity")&&<IntensityZone behavior={behavior} logs={bLogs} onLog={handleLog} user={user} color={color}/>}
+        {behavior.types.includes("frequency")&&<FrequencyZone logs={bLogs} onLog={handleLog} user={user} color={color} sessionStart={sessionStart}/>}
+        {behavior.types.includes("duration")&&<DurationZone logs={bLogs} onLog={handleLog} user={user} color={color} sessionStart={sessionStart}/>}
+        {behavior.types.includes("latency")&&<LatencyZone logs={bLogs} onLog={handleLog} user={user} color={color} sessionStart={sessionStart}/>}
+        {behavior.types.includes("trials")&&<TrialsZone logs={bLogs} onLog={handleLog} user={user} color={color} sessionStart={sessionStart}/>}
+        {behavior.types.includes("abc")&&<ABCZone behavior={behavior} logs={bLogs} onLog={handleLog} user={user} color={color} sessionStart={sessionStart}/>}
+        {behavior.types.includes("intensity")&&<IntensityZone behavior={behavior} logs={bLogs} onLog={handleLog} user={user} color={color} sessionStart={sessionStart}/>}
       </div>
       {recent.length>0&&(
         <div className="behavior-logs" style={{borderTop:`2px solid ${color.border}`}}>
@@ -1335,7 +1350,7 @@ function BehaviorBlock({ behavior, bIndex, studentId, user, allLogs, onLog }) {
   );
 }
 
-function GoalsSection({ student, allLogs, onLog }) {
+function GoalsSection({ student, allLogs, onLog, sessionStart }) {
   const t=useLang();
   if(!student.goals?.length) return null;
   return (
@@ -1344,7 +1359,7 @@ function GoalsSection({ student, allLogs, onLog }) {
       <div className="goals-section-sub">{t.goalsSub}</div>
       {student.goals.map(goal=>{
         const key=`${student.id}-goal-${goal.id}`;
-        const logs=(allLogs[key]||[]).filter(l=>l.date===today());
+        const logs=(allLogs[key]||[]).filter(l=>l.ts>=sessionStart);
         const correct=logs.filter(l=>l.result==="correct").length;
         const incorrect=logs.filter(l=>l.result==="incorrect").length;
         const total=correct+incorrect;
@@ -1428,6 +1443,8 @@ function StudentTrackPage({ student, user, allLogs, onLog, sessions, onReviewReq
   const t=useLang();
   const [showToast, setShowToast] = useState(true);
   const session = sessions[sessionKey(student.id, user.id)];
+  // Only show data logged during the current session — start of this session or 0 if no session
+  const sessionStart = session?.timeIn || Date.now();
   useEffect(()=>{
     const t = setTimeout(()=>setShowToast(false), 3000);
     return ()=>clearTimeout(t);
@@ -1450,9 +1467,9 @@ function StudentTrackPage({ student, user, allLogs, onLog, sessions, onReviewReq
         onDeleteSession={()=>onDeleteSession(student.id, user.id)}
       />
       <div className="behaviors-list">
-        {student.behaviors.map((b,i)=><BehaviorBlock key={b.id} behavior={b} bIndex={i} studentId={student.id} user={user} allLogs={allLogs} onLog={onLog}/>)}
+        {student.behaviors.map((b,i)=><BehaviorBlock key={b.id} behavior={b} bIndex={i} studentId={student.id} user={user} allLogs={allLogs} onLog={onLog} sessionStart={sessionStart}/>)}
         {student.behaviors.length===0&&<div style={{color:"var(--muted)",fontWeight:700,padding:20,background:"var(--surface)",borderRadius:14,textAlign:"center",fontSize:14}}>{t.noBehaviors}</div>}
-        {student.goals?.length>0&&<GoalsSection student={student} allLogs={allLogs} onLog={onLog}/>}
+        {student.goals?.length>0&&<GoalsSection student={student} allLogs={allLogs} onLog={onLog} sessionStart={sessionStart}/>}
       </div>
     </div>
   );
@@ -1974,21 +1991,23 @@ function DataRecoveryPage({ students, allLogs, onMerge }) {
   }
 
   function exportSingleCSV(student, orphanKey, logs) {
-    const behId = orphanKey.replace(student.id + "-", "");
-    const rows = [["Date","Time","Type","Details","By"]];
-    logs.forEach(l => rows.push([l.date, l.time, l.type, formatLogEntry(l), l.who||"—"]));
+    const behaviorName = logs.find(l=>l.behaviorName)?.behaviorName || orphanKey.replace(student.id+"-","");
+    const safeName = behaviorName.replace(/[^a-zA-Z0-9]/g,"_");
+    const rows = [["Date","Time","Behavior","Type","Details","By"]];
+    logs.forEach(l => rows.push([l.date, l.time, behaviorName, l.type, formatLogEntry(l), l.who||"—"]));
     const csv = rows.map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"}));
-    a.download = `${student.name.replace(/ /g,"_")}_${behId}.csv`;
+    a.download = `${student.name.replace(/ /g,"_")}_${safeName}.csv`;
     a.click();
   }
 
   function exportAllOrphansCSV(student, orphanKeys) {
-    const rows = [["Date","Time","Orphaned Behavior ID","Type","Details","By"]];
+    const rows = [["Date","Time","Behavior","Type","Details","By"]];
     orphanKeys.forEach(key => {
-      const behId = key.replace(student.id + "-", "");
-      (allLogs[key]||[]).forEach(l => rows.push([l.date, l.time, behId, l.type, formatLogEntry(l), l.who||"—"]));
+      const keyLogs = allLogs[key]||[];
+      const behaviorName = keyLogs.find(l=>l.behaviorName)?.behaviorName || `Removed behavior (${key.replace(student.id+"-","")})`;
+      keyLogs.forEach(l => rows.push([l.date, l.time, behaviorName, l.type, formatLogEntry(l), l.who||"—"]));
     });
     const csv = rows.map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -2036,7 +2055,8 @@ function DataRecoveryPage({ students, allLogs, onMerge }) {
               </div>
             );
             const logs = allLogs[orphanKey] || [];
-            const behId = orphanKey.replace(student.id + "-", "");
+            // Use the behaviorName stored in log entries — fall back to a cleaner label if not present
+            const behaviorName = logs.find(l=>l.behaviorName)?.behaviorName || null;
             const dateSet = [...new Set(logs.map(l=>l.date))];
             const types = [...new Set(logs.map(l=>l.type))];
             const preview = logs.slice(-5).reverse();
@@ -2045,7 +2065,10 @@ function DataRecoveryPage({ students, allLogs, onMerge }) {
             return (
               <div key={orphanKey} className="orphan-key-block">
                 <div className="orphan-key-title">
-                  <span>⚠️ Removed behavior <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,opacity:.8}}>{behId}</span></span>
+                  <span>⚠️ {behaviorName
+                    ? <strong style={{color:"#92400E"}}>{behaviorName}</strong>
+                    : <span style={{color:"#B45309",fontStyle:"italic"}}>Removed behavior (name unavailable)</span>
+                  }</span>
                   <span style={{color:"var(--accent)",fontWeight:800,fontSize:12}}>{logs.length} entries · {dateSet.length} day{dateSet.length!==1?"s":""}</span>
                 </div>
                 <div style={{fontSize:11,color:"#B45309",fontWeight:600,marginBottom:8}}>
@@ -2809,12 +2832,44 @@ const T = {
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function LoginPage({onLogin,users,lang,onToggleLang}){
-  const [sel,setSel]=useState(null);
-  const [pin,setPin]=useState("");
-  const [err,setErr]=useState("");
-  const t=T[lang||"en"];
-  function login(){if(pin===sel.pin)onLogin(sel);else{setErr(t.wrongPin);setPin("");}}
-  return(
+  const [search, setSearch] = useState("");
+  const [sel, setSel] = useState(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState("");
+  const t = T[lang||"en"];
+  const inputRef = useRef(null);
+
+  const filtered = users.filter(u =>
+    u.name.toLowerCase().includes(search.toLowerCase()) && search.trim().length > 0
+  );
+
+  function selectUser(u) {
+    setSel(u);
+    setSearch(u.name);
+    setShowDropdown(false);
+    setPin("");
+    setErr("");
+    // Focus PIN after a tick
+    setTimeout(()=>document.getElementById("pin-input")?.focus(), 100);
+  }
+
+  function clearSearch() {
+    setSearch("");
+    setSel(null);
+    setPin("");
+    setErr("");
+    setShowDropdown(false);
+    inputRef.current?.focus();
+  }
+
+  function login() {
+    if (!sel) return;
+    if (pin === sel.pin) onLogin(sel);
+    else { setErr(t.wrongPin); setPin(""); }
+  }
+
+  return (
     <div className="login-wrap">
       <div className="login-card">
         <div className="login-logo">📋</div>
@@ -2823,17 +2878,75 @@ function LoginPage({onLogin,users,lang,onToggleLang}){
           <button className="lang-toggle" onClick={onToggleLang}>{t.langToggle}</button>
         </div>
         <div className="login-sub">{t.appSub}</div>
-        {users.map(u=>{const c=userColor(u.name);return(
-          <button key={u.id} className={`user-btn ${sel?.id===u.id?"selected":""}`} onClick={()=>{setSel(u);setPin("");setErr("");}}>
-            <span style={{width:32,height:32,borderRadius:"50%",background:c.bg,color:c.text,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12,flexShrink:0}}>{initials(u.name)}</span>
-            {u.name}<span className="user-role">{u.role==="admin"?`⭐ ${t.admin}`:`👤 ${t.para}`}</span>
-          </button>
-        );})}
-        {sel&&(
+
+        {/* Search field */}
+        {!sel && (
+          <div className="login-search-wrap">
+            <span className="login-search-icon">🔍</span>
+            <input
+              ref={inputRef}
+              className="login-search-input"
+              placeholder="Search your name…"
+              value={search}
+              autoComplete="off"
+              onChange={e=>{setSearch(e.target.value);setShowDropdown(true);setSel(null);}}
+              onFocus={()=>{if(search.trim())setShowDropdown(true);}}
+            />
+            {search && (
+              <button className="login-search-clear" onClick={clearSearch}>✕</button>
+            )}
+          </div>
+        )}
+
+        {/* Dropdown results */}
+        {!sel && showDropdown && search.trim().length > 0 && (
+          <div className="login-dropdown">
+            {filtered.length > 0 ? filtered.map(u => {
+              const c = userColor(u.name);
+              return (
+                <button key={u.id} className="login-dropdown-item" onClick={()=>selectUser(u)}>
+                  <span style={{width:36,height:36,borderRadius:"50%",background:c.bg,color:c.text,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:13,flexShrink:0}}>{initials(u.name)}</span>
+                  <span style={{flex:1}}>{u.name}</span>
+                  <span className="user-role">{u.role==="admin"?`⭐ ${t.admin}`:`👤 ${t.para}`}</span>
+                </button>
+              );
+            }) : (
+              <div className="login-no-results">No staff found matching "{search}"</div>
+            )}
+          </div>
+        )}
+
+        {/* Selected user banner */}
+        {sel && (
+          <div className="login-selected-banner" onClick={clearSearch}>
+            {(()=>{const c=userColor(sel.name);return(
+              <span style={{width:38,height:38,borderRadius:"50%",background:c.bg,color:c.text,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,flexShrink:0}}>{initials(sel.name)}</span>
+            );}())}
+            <div style={{flex:1}}>
+              <div style={{fontWeight:800,fontSize:15,color:"var(--text)"}}>{sel.name}</div>
+              <div style={{fontSize:11,color:"var(--muted)",fontWeight:600}}>{sel.role==="admin"?`⭐ ${t.admin}`:`👤 ${t.para}`}</div>
+            </div>
+            <span className="login-selected-change">Change</span>
+          </div>
+        )}
+
+        {/* PIN entry */}
+        {sel && (
           <div className="pin-wrap">
             <div className="pin-label">{t.pinFor(sel.name)}</div>
-            <input className="pin-input" type="password" inputMode="numeric" maxLength={4} value={pin} onChange={e=>{setPin(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&login()} autoFocus placeholder="••••"/>
-            {err&&<div className="pin-error">⚠ {err}</div>}
+            <input
+              id="pin-input"
+              className="pin-input"
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              value={pin}
+              onChange={e=>{setPin(e.target.value.replace(/\D/,""));setErr("");}}
+              onKeyDown={e=>e.key==="Enter"&&login()}
+              autoFocus
+              placeholder="••••"
+            />
+            {err && <div className="pin-error">⚠ {err}</div>}
             <button className="btn-primary full" onClick={login}>{t.signIn}</button>
           </div>
         )}
