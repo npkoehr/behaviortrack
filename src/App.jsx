@@ -2831,6 +2831,20 @@ const T = {
 };
 
 // ─── Login ────────────────────────────────────────────────────────────────────
+function SelectedUserBanner({ sel, t, onClear }) {
+  const c = userColor(sel.name);
+  return (
+    <div className="login-selected-banner" onClick={onClear}>
+      <span style={{width:38,height:38,borderRadius:"50%",background:c.bg,color:c.text,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,flexShrink:0}}>{initials(sel.name)}</span>
+      <div style={{flex:1}}>
+        <div style={{fontWeight:800,fontSize:15,color:"var(--text)"}}>{sel.name}</div>
+        <div style={{fontSize:11,color:"var(--muted)",fontWeight:600}}>{sel.role==="admin"?`⭐ ${t.admin}`:`👤 ${t.para}`}</div>
+      </div>
+      <span className="login-selected-change">Change</span>
+    </div>
+  );
+}
+
 function LoginPage({onLogin,users,lang,onToggleLang}){
   const [search, setSearch] = useState("");
   const [sel, setSel] = useState(null);
@@ -2918,16 +2932,7 @@ function LoginPage({onLogin,users,lang,onToggleLang}){
 
         {/* Selected user banner */}
         {sel && (
-          <div className="login-selected-banner" onClick={clearSearch}>
-            {(()=>{const c=userColor(sel.name);return(
-              <span style={{width:38,height:38,borderRadius:"50%",background:c.bg,color:c.text,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,flexShrink:0}}>{initials(sel.name)}</span>
-            );}())}
-            <div style={{flex:1}}>
-              <div style={{fontWeight:800,fontSize:15,color:"var(--text)"}}>{sel.name}</div>
-              <div style={{fontSize:11,color:"var(--muted)",fontWeight:600}}>{sel.role==="admin"?`⭐ ${t.admin}`:`👤 ${t.para}`}</div>
-            </div>
-            <span className="login-selected-change">Change</span>
-          </div>
+          <SelectedUserBanner sel={sel} t={t} onClear={clearSearch}/>
         )}
 
         {/* PIN entry */}
